@@ -397,7 +397,7 @@ void LinkGameLogic(EngineInfo info);
 // ORIGINAL CLASS
 
 // Windows.h already included by master header
-#if !(RETRO_PLATFORM == RETRO_WIN || RETRO_PLATFORM == RETRO_SWITCH)
+#if !(RETRO_PLATFORM == RETRO_WIN || RETRO_PLATFORM == RETRO_SWITCH || RETRO_PLATFORM == RETRO_PS2)
 #include <dlfcn.h>
 #endif
 
@@ -442,6 +442,13 @@ public:
 #endif
 #endif
 
+#if RETRO_PLATFORM == RETRO_PS2
+    // kinda using the 3ds port as a reference
+    static inline Handle Open(std::string path)                      { return NULL; }
+    static inline void Close(Handle handle)                          { return; }
+    static inline void *GetSymbol(Handle handle, const char *symbol) { return NULL; }
+    static inline char *GetError()                                   { return NULL; }
+#else
     static inline Handle PlatformLoadLibrary(std::string path)
     {
         Handle ret;
@@ -540,6 +547,7 @@ public:
         return dlerror();
 #endif
     }
+#endif // ! RETRO_PLATFORM == RETRO_PS2
 
 private:
 #if RETRO_PLATFORM == RETRO_WIN

@@ -124,6 +124,7 @@ if(COMPILE_THEORA)
         ${THEORA_DIR}/lib/tokenize.c
     )
 
+    target_compile_options(libtheora PRIVATE ${OGG_STATIC_CFLAGS})
     target_compile_options(libtheora PRIVATE ${THEORA_FLAGS})
 
     target_include_directories(libtheora PRIVATE ${THEORA_DIR}/include ${OGG_DIR}/include)

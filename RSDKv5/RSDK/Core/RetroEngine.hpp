@@ -91,6 +91,7 @@ enum GameRegions {
 #define RETRO_iOS     (6)
 #define RETRO_ANDROID (7)
 #define RETRO_UWP     (8)
+#define RETRO_PS2     (9)
 
 // ============================
 // PLATFORMS (used mostly in legacy but could come in handy here)
@@ -141,6 +142,9 @@ enum GameRegions {
 #define RETRO_DEVICETYPE (RETRO_STANDARD)
 #elif defined __linux__
 #define RETRO_PLATFORM   (RETRO_LINUX)
+#define RETRO_DEVICETYPE (RETRO_STANDARD)
+#elif defined __PS2__
+#define RETRO_PLATFORM   (RETRO_PS2)
 #define RETRO_DEVICETYPE (RETRO_STANDARD)
 #else
 #define RETRO_PLATFORM   (RETRO_WIN)
@@ -321,6 +325,18 @@ enum GameRegions {
 
 #undef RETRO_INPUTDEVICE_XINPUT
 #define RETRO_INPUTDEVICE_XINPUT (1)
+
+#elif RETRO_PLATFORM == RETRO_PS2
+
+#undef RETRO_RENDERDEVICE_SDL2
+#define RETRO_RENDERDEVICE_SDL2 (1)
+#undef RETRO_INPUTDEVICE_SDL2
+#define RETRO_INPUTDEVICE_SDL2 (1)
+
+#undef RETRO_AUDIODEVICE_MINI
+#define RETRO_AUDIODEVICE_MINI (0)
+#undef RETRO_AUDIODEVICE_SDL2
+#define RETRO_AUDIODEVICE_SDL2 (1)
 
 #elif RETRO_PLATFORM == RETRO_LINUX
 
