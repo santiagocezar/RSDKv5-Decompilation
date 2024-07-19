@@ -24,8 +24,9 @@ bool RenderDevice::Init()
     gsGlobal = gsKit_init_global();
 
 
-    gsGlobal->Mode = GS_MODE_VGA_640_60;
-    gsGlobal->PrimAlphaEnable = GS_SETTING_ON;
+    gsGlobal->Mode            = GS_MODE_VGA_640_60;
+    // gsGlobal->PrimAlphaEnable = GS_SETTING_ON;
+    gsGlobal->PSM             = GS_PSM_CT16;
     // gsGlobal->Interlace = GS_NONINTERLACED;
     // gsGlobal->Field = GS_FRAME;
 
@@ -370,13 +371,18 @@ bool RenderDevice::InitGraphicsAPI()
     // SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
 
     // ok so, the PS2 has 4MiB of VRAM. if textureSize is 1024x512 each screen (thats four) uses 1MiB... idk what the code above is supposed to do but hopefully that doesn't happpen
+
+
     for (int32 s = 0; s < SCREEN_COUNT; ++s) {
+        printf("allocating texture %i with %fx%f in size\n", s, textureSize.x, textureSize.y);
+        printf("current pointer: %#08x\n", gsGlobal->CurrentPointer);
         screenTexture[s].Width  = textureSize.x;
         screenTexture[s].Height = textureSize.y;
         screenTexture[s].PSM    = GS_PSM_CT16;
         screenTexture[s].Filter = GS_FILTER_NEAREST;
         screenTexture[s].Mem    = (uint32*)memalign(128,
                                            gsKit_texture_size_ee(textureSize.x, textureSize.y, screenTexture[s].PSM));
+
         screenTexture[s].Vram   = gsKit_vram_alloc(gsGlobal,
                                                    gsKit_texture_size_ee(textureSize.x, textureSize.y, screenTexture[s].PSM),
                                                    GSKIT_ALLOC_USERBUFFER);
