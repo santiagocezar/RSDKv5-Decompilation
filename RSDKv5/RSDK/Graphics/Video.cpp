@@ -2,6 +2,13 @@
 
 using namespace RSDK;
 
+bool32 RSDK::LoadVideo(const char *filename, double startDelay, bool32 (*skipCallback)()) {
+    return false;
+};
+void RSDK::ProcessVideo() {
+    return;
+};
+#if 0
 FileInfo VideoManager::file;
 
 ogg_sync_state VideoManager::oy;
@@ -284,3 +291,4 @@ void RSDK::ProcessVideo()
 #endif
     }
 }
+#endif

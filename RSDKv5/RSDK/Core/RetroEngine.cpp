@@ -24,6 +24,7 @@ RetroEngine RSDK::engine = RetroEngine();
 
 int32 RSDK::RunRetroEngine(int32 argc, char *argv[])
 {
+    printf("here\n");
     ParseArguments(argc, argv);
 
     if (engine.consoleEnabled)
@@ -104,8 +105,9 @@ int32 RSDK::RunRetroEngine(int32 argc, char *argv[])
         }
 #endif
     }
-
+    printf("here4\n");
     RenderDevice::InitFPSCap();
+    printf("here5\n");
 
     while (RenderDevice::isRunning) {
         RenderDevice::ProcessEvents();

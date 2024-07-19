@@ -5,6 +5,7 @@ namespace RSDK
 {
 
 struct VideoManager {
+    /*
     static FileInfo file;
 
     static ogg_sync_state oy;
@@ -20,6 +21,7 @@ struct VideoManager {
     static th_pixel_fmt pixelFormat;
     static ogg_int64_t granulePos;
     static bool32 initializing;
+    */
 };
 
 bool32 LoadVideo(const char *filename, double startDelay, bool32 (*skipCallback)());

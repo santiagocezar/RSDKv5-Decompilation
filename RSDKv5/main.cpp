@@ -80,8 +80,24 @@ int32 main(int32 argc, char *argv[]) { return RSDK_main(argc, argv, (void *)Link
 
 int32 RSDK_main(int32 argc, char **argv, void *linkLogicPtr)
 {
-    RSDK::linkGameLogic = (RSDK::LogicLinkHandle)linkLogicPtr;
+    // size_t max_size = 134217728, min_size = 0, median;
+    // while (true) {
+    //     median = (max_size + min_size) / 2;
+    //     printf("allocating %u bytes\n", median);
+    //     char *thing = (char*)malloc(median);
+    //     if (thing == NULL) {
+    //         printf("too much!\n");
+    //         max_size = median;
+    //     } else {
+    //         printf("too low?\n");
+    //         if (min_size == median) break;
+    //         min_size = median;
+    //         free(thing);
+    //     }
+    // }
+    // printf("%u bytes free!\n", max_size);
 
+    RSDK::linkGameLogic = (RSDK::LogicLinkHandle)linkLogicPtr;
     RSDK::InitCoreAPI();
 
     int32 exitCode = RSDK::RunRetroEngine(argc, argv);

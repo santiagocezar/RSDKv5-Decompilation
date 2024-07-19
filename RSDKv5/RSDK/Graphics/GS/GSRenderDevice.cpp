@@ -1,12 +1,12 @@
+#include <malloc.h>
 
-SDL_Window *RenderDevice::window     = nullptr;
-SDL_Renderer *RenderDevice::renderer = nullptr;
-SDL_Texture *RenderDevice::screenTexture[SCREEN_COUNT];
+GSGLOBAL *RenderDevice::gsGlobal = nullptr;
+GSTEXTURE RenderDevice::screenTexture[SCREEN_COUNT];
 
-SDL_Texture *RenderDevice::imageTexture = nullptr;
+// SDL_Texture *RenderDevice::imageTexture = nullptr;
 
-uint32 RenderDevice::displayModeIndex = 0;
-int32 RenderDevice::displayModeCount  = 0;
+// uint32 RenderDevice::displayModeIndex = 0;
+// int32 RenderDevice::displayModeCount  = 0;
 
 unsigned long long RenderDevice::targetFreq = 0;
 unsigned long long RenderDevice::curTicks   = 0;
@@ -14,64 +14,33 @@ unsigned long long RenderDevice::prevTicks  = 0;
 
 RenderVertex RenderDevice::vertexBuffer[!RETRO_REV02 ? 24 : 60];
 
-uint8 RenderDevice::lastTextureFormat = -1;
+// uint8 RenderDevice::lastTextureFormat = -1;
 
 #define NORMALIZE(val, minVal, maxVal) ((float)(val) - (float)(minVal)) / ((float)(maxVal) - (float)(minVal))
 
 bool RenderDevice::Init()
 {
-    printf("this gets initialized!\n");
-    const char *gameTitle = gameVerInfo.gameTitle;
 
-    SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
+    gsGlobal = gsKit_init_global();
 
-    uint8 flags = 0;
 
-#if RETRO_PLATFORM == RETRO_ANDROID
-    videoSettings.windowed = false;
-    SDL_DisplayMode dm;
-    SDL_GetDesktopDisplayMode(0, &dm);
-    float hdp = 0, vdp = 0;
+    gsGlobal->Mode = GS_MODE_VGA_640_60;
+    gsGlobal->PrimAlphaEnable = GS_SETTING_ON;
+    // gsGlobal->Interlace = GS_NONINTERLACED;
+    // gsGlobal->Field = GS_FRAME;
 
-    bool landscape = dm.h < dm.w;
-    int32 h        = landscape ? dm.w : dm.h;
-    int32 w        = landscape ? dm.h : dm.w;
+    dmaKit_init(D_CTRL_RELE_OFF, D_CTRL_MFD_OFF, D_CTRL_STS_UNSPEC,
+                D_CTRL_STD_OFF, D_CTRL_RCYC_8, 1 << DMA_CHANNEL_GIF);
 
-    videoSettings.windowWidth = ((float)SCREEN_YSIZE * h / w);
+    dmaKit_chan_init(DMA_CHANNEL_GIF);
 
-#elif RETRO_PLATFORM == RETRO_SWITCH
+    gsKit_init_screen(gsGlobal);
+
+    gsKit_mode_switch(gsGlobal, GS_ONESHOT);
+
     videoSettings.windowed     = false;
-    videoSettings.windowWidth  = 1920;
-    videoSettings.windowHeight = 1080;
-    flags |= SDL_WINDOW_FULLSCREEN;
-#elif RETRO_PLATFORM == RETRO_PS2
-    videoSettings.windowed     = false;
-    videoSettings.windowWidth  = 640;
-    videoSettings.windowHeight = 480;
-    flags |= SDL_WINDOW_FULLSCREEN;
-#endif
-
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-    SDL_SetHint(SDL_HINT_RENDER_VSYNC, videoSettings.vsync ? "1" : "0");
-
-    window = SDL_CreateWindow(gameTitle, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, videoSettings.windowWidth, videoSettings.windowHeight,
-                              SDL_WINDOW_ALLOW_HIGHDPI | flags);
-
-    if (!window) {
-        PrintLog(PRINT_NORMAL, "ERROR: failed to create window!");
-        return false;
-    }
-
-    if (!videoSettings.windowed) {
-        SDL_RestoreWindow(window);
-        SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
-        SDL_ShowCursor(SDL_FALSE);
-    }
-
-    if (!videoSettings.bordered) {
-        SDL_RestoreWindow(window);
-        SDL_SetWindowBordered(window, SDL_FALSE);
-    }
+    videoSettings.windowWidth  = gsGlobal->Width;
+    videoSettings.windowHeight = gsGlobal->Height;
 
     PrintLog(PRINT_NORMAL, "w: %d h: %d windowed: %d", videoSettings.windowWidth, videoSettings.windowHeight, videoSettings.windowed);
 
@@ -84,21 +53,38 @@ bool RenderDevice::Init()
 
 void RenderDevice::CopyFrameBuffer()
 {
-    int32 pitch    = 0;
-    uint16 *pixels = NULL;
-
     for (int32 s = 0; s < videoSettings.screenCount; ++s) {
-        SDL_LockTexture(screenTexture[s], NULL, (void **)&pixels, &pitch);
-
+        uint16 *pixels = (uint16 *)screenTexture[s].Mem;
         uint16 *frameBuffer = screens[s].frameBuffer;
         for (int32 y = 0; y < SCREEN_YSIZE; ++y) {
             memcpy(pixels, frameBuffer, screens[s].size.x * sizeof(uint16));
             frameBuffer += screens[s].pitch;
-            pixels += pitch / sizeof(uint16);
+            pixels += screens[s].pitch;
         }
 
-        SDL_UnlockTexture(screenTexture[s]);
+        gsKit_texture_upload(gsGlobal, &screenTexture[s]);
     }
+}
+
+void RenderDevice::DrawScreenGeometry(GSTEXTURE* texture, int32 startVert, bool video = false) {
+    float x1 = vertexBuffer[startVert].pos.x,
+          y1 = vertexBuffer[startVert].pos.y,
+          x2 = vertexBuffer[startVert + 2].pos.x,
+          y2 = vertexBuffer[startVert + 2].pos.y,
+          u1 = vertexBuffer[startVert].tex.x * textureSize.x,
+          v1 = vertexBuffer[startVert].tex.y * textureSize.y,
+          u2 = vertexBuffer[startVert + 2].tex.x * textureSize.x,
+          v2 = vertexBuffer[startVert + 2].tex.y * textureSize.y;
+
+    if (video){
+        u2 = vertexBuffer[startVert + 2].tex.x * 1024;
+        v2 = vertexBuffer[startVert + 2].tex.y * 512;
+    }
+
+    gsKit_prim_sprite_texture(gsGlobal, texture,
+                              x1, y1, u1, v1,
+                              x2, y2, u2, v2,
+                              0, GS_SETREG_RGBA(0xff, 0xff, 0xff, 0xff));
 }
 
 void RenderDevice::FlipScreen()
@@ -114,211 +100,67 @@ void RenderDevice::FlipScreen()
 
     // Clear the screen. This is needed to keep the
     // pillarboxes in fullscreen from displaying garbage data.
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0xFF);
-    SDL_RenderClear(renderer);
+    gsKit_clear(gsGlobal, 0);
 
-#if (SDL_COMPILEDVERSION >= SDL_VERSIONNUM(2, 0, 18))
     int32 startVert = 0;
-    switch (videoSettings.screenCount) {
-        default:
-        case 0:
-#if RETRO_REV02
-            startVert = 54;
-#else
-            startVert = 18;
-#endif
-            SDL_RenderGeometryRaw(renderer, imageTexture, &vertexBuffer[startVert].pos.x, sizeof(RenderVertex),
-                                  (SDL_Color *)&vertexBuffer[startVert].color, sizeof(RenderVertex), &vertexBuffer[startVert].tex.x,
-                                  sizeof(RenderVertex), 6, NULL, 0, 0);
-            break;
-
-        case 1:
-            startVert = 0;
-            SDL_RenderGeometryRaw(renderer, screenTexture[0], &vertexBuffer[startVert].pos.x, sizeof(RenderVertex),
-                                  (SDL_Color *)&vertexBuffer[startVert].color, sizeof(RenderVertex), &vertexBuffer[startVert].tex.x,
-                                  sizeof(RenderVertex), 6, NULL, 0, 0);
-            break;
-
-        case 2:
-#if RETRO_REV02
-            startVert = startVertex_2P[0];
-#else
-            startVert = 6;
-#endif
-            SDL_RenderGeometryRaw(renderer, screenTexture[0], &vertexBuffer[startVert].pos.x, sizeof(RenderVertex),
-                                  (SDL_Color *)&vertexBuffer[startVert].color, sizeof(RenderVertex), &vertexBuffer[startVert].tex.x,
-                                  sizeof(RenderVertex), 6, NULL, 0, 0);
-
-#if RETRO_REV02
-            startVert = startVertex_2P[1];
-#else
-            startVert = 12;
-#endif
-            SDL_RenderGeometryRaw(renderer, screenTexture[1], &vertexBuffer[startVert].pos.x, sizeof(RenderVertex),
-                                  (SDL_Color *)&vertexBuffer[startVert].color, sizeof(RenderVertex), &vertexBuffer[startVert].tex.x,
-                                  sizeof(RenderVertex), 6, NULL, 0, 0);
-            break;
-
-#if RETRO_REV02
-        case 3:
-            startVert = startVertex_3P[0];
-            SDL_RenderGeometryRaw(renderer, screenTexture[0], &vertexBuffer[startVert].pos.x, sizeof(RenderVertex),
-                                  (SDL_Color *)&vertexBuffer[startVert].color, sizeof(RenderVertex), &vertexBuffer[startVert].tex.x,
-                                  sizeof(RenderVertex), 6, NULL, 0, 0);
-
-            startVert = startVertex_3P[1];
-            SDL_RenderGeometryRaw(renderer, screenTexture[1], &vertexBuffer[startVert].pos.x, sizeof(RenderVertex),
-                                  (SDL_Color *)&vertexBuffer[startVert].color, sizeof(RenderVertex), &vertexBuffer[startVert].tex.x,
-                                  sizeof(RenderVertex), 6, NULL, 0, 0);
-
-            startVert = startVertex_3P[2];
-            SDL_RenderGeometryRaw(renderer, screenTexture[2], &vertexBuffer[startVert].pos.x, sizeof(RenderVertex),
-                                  (SDL_Color *)&vertexBuffer[startVert].color, sizeof(RenderVertex), &vertexBuffer[startVert].tex.x,
-                                  sizeof(RenderVertex), 6, NULL, 0, 0);
-            break;
-
-        case 4:
-            startVert = 30;
-            SDL_RenderGeometryRaw(renderer, screenTexture[0], &vertexBuffer[startVert].pos.x, sizeof(RenderVertex),
-                                  (SDL_Color *)&vertexBuffer[startVert].color, sizeof(RenderVertex), &vertexBuffer[startVert].tex.x,
-                                  sizeof(RenderVertex), 6, NULL, 0, 0);
-
-            startVert = 36;
-            SDL_RenderGeometryRaw(renderer, screenTexture[1], &vertexBuffer[startVert].pos.x, sizeof(RenderVertex),
-                                  (SDL_Color *)&vertexBuffer[startVert].color, sizeof(RenderVertex), &vertexBuffer[startVert].tex.x,
-                                  sizeof(RenderVertex), 6, NULL, 0, 0);
-
-            startVert = 42;
-            SDL_RenderGeometryRaw(renderer, screenTexture[2], &vertexBuffer[startVert].pos.x, sizeof(RenderVertex),
-                                  (SDL_Color *)&vertexBuffer[startVert].color, sizeof(RenderVertex), &vertexBuffer[startVert].tex.x,
-                                  sizeof(RenderVertex), 6, NULL, 0, 0);
-
-            startVert = 48;
-            SDL_RenderGeometryRaw(renderer, screenTexture[3], &vertexBuffer[startVert].pos.x, sizeof(RenderVertex),
-                                  (SDL_Color *)&vertexBuffer[startVert].color, sizeof(RenderVertex), &vertexBuffer[startVert].tex.x,
-                                  sizeof(RenderVertex), 6, NULL, 0, 0);
-            break;
-#endif
-    }
-#else
-    int32 startVert = 0;
-    SDL_Rect src, dst;
-
-    // some cheating for today
-#define _SET_RECTS                                                                                                                                   \
-    dst.x = vertexBuffer[startVert].pos.x;                                                                                                           \
-    dst.y = vertexBuffer[startVert].pos.y;                                                                                                           \
-    dst.w = vertexBuffer[startVert + 2].pos.x - dst.x;                                                                                               \
-    dst.h = vertexBuffer[startVert + 2].pos.y - dst.y;                                                                                               \
-    src.x = vertexBuffer[startVert].tex.x * textureSize.x;                                                                                           \
-    src.y = vertexBuffer[startVert].tex.y * textureSize.y;                                                                                           \
-    src.w = vertexBuffer[startVert + 2].tex.x * textureSize.x - src.x;                                                                               \
-    src.h = vertexBuffer[startVert + 2].tex.y * textureSize.y - src.y;
 
     switch (videoSettings.screenCount) {
         default:
         case 0:
-#if RETRO_REV02
-            startVert = 54;
-#else
-            startVert = 18;
-#endif
-            _SET_RECTS;
-            src.w = vertexBuffer[startVert + 2].tex.x * 1024 - src.x;
-            src.h = vertexBuffer[startVert + 2].tex.y * 512 - src.y;
-            SDL_RenderCopy(renderer, imageTexture, &src, &dst);
+            #if RETRO_REV02
+            // DrawScreenGeometry(&imageTexture, 54, true);
+            #else
+            // DrawScreenGeometry(&imageTexture, 18, true);
+            #endif
             break;
 
         case 1:
-            startVert = 0;
-            _SET_RECTS;
-
-            SDL_RenderCopy(renderer, screenTexture[0], &src, &dst);
+            DrawScreenGeometry(&screenTexture[0], 0);
             break;
 
         case 2:
-#if RETRO_REV02
-            startVert = startVertex_2P[0];
-#else
-            startVert = 6;
-#endif
-            _SET_RECTS;
+            #if RETRO_REV02
+            DrawScreenGeometry(&screenTexture[0], startVertex_2P[0]);
+            DrawScreenGeometry(&screenTexture[1], startVertex_2P[1]);
+            #else
+            DrawScreenGeometry(&screenTexture[0], 6);
+            DrawScreenGeometry(&screenTexture[1], 12);
+            #endif
 
-            SDL_RenderCopy(renderer, screenTexture[0], &src, &dst);
-
-#if RETRO_REV02
-            startVert = startVertex_2P[1];
-#else
-            startVert = 12;
-#endif
-            _SET_RECTS;
-
-            SDL_RenderCopy(renderer, screenTexture[1], &src, &dst);
-            break;
-
-#if RETRO_REV02
+            #if RETRO_REV02
         case 3:
-            startVert = startVertex_3P[0];
-            _SET_RECTS;
-
-            SDL_RenderCopy(renderer, screenTexture[0], &src, &dst);
-
-            startVert = startVertex_3P[1];
-            _SET_RECTS;
-
-            SDL_RenderCopy(renderer, screenTexture[1], &src, &dst);
-
-            startVert = startVertex_3P[2];
-            _SET_RECTS;
-
-            SDL_RenderCopy(renderer, screenTexture[2], &src, &dst);
-
+            DrawScreenGeometry(&screenTexture[0], startVertex_3P[0]);
+            DrawScreenGeometry(&screenTexture[1], startVertex_3P[1]);
+            DrawScreenGeometry(&screenTexture[2], startVertex_3P[2]);
             break;
 
         case 4:
-            startVert = 30;
-            _SET_RECTS;
-
-            SDL_RenderCopy(renderer, screenTexture[0], &src, &dst);
-
-            startVert = 36;
-            _SET_RECTS;
-
-            SDL_RenderCopy(renderer, screenTexture[1], &src, &dst);
-
-            startVert = 42;
-            _SET_RECTS;
-
-            SDL_RenderCopy(renderer, screenTexture[2], &src, &dst);
-
-            startVert = 48;
-            _SET_RECTS;
-
-            SDL_RenderCopy(renderer, screenTexture[3], &src, &dst);
-
+            DrawScreenGeometry(&screenTexture[0], 30);
+            DrawScreenGeometry(&screenTexture[1], 36);
+            DrawScreenGeometry(&screenTexture[2], 42);
+            DrawScreenGeometry(&screenTexture[3], 48);
             break;
-#endif
+            #endif
     }
-#endif
-    if (dimAmount < 1.0f) {
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0xFF - (dimAmount * 0xFF));
-        SDL_RenderFillRect(renderer, NULL);
-    }
-    // no change here
-    SDL_RenderPresent(renderer);
+    // if (dimAmount < 1.0f) {
+    //     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0xFF - (dimAmount * 0xFF));
+    //     SDL_RenderFillRect(renderer, NULL);
+    // }
+    // SDL_RenderPresent(renderer);
+
+    gsKit_queue_exec(gsGlobal);
+    gsKit_sync_flip(gsGlobal);
 }
 
 void RenderDevice::Release(bool32 isRefresh)
 {
     for (int32 s = 0; s < SCREEN_COUNT; ++s) {
-        if (screenTexture[s])
-            SDL_DestroyTexture(screenTexture[s]);
-        screenTexture[s] = NULL;
+        free(screenTexture[s].Mem);
+        screenTexture[s].Vram = 0;
     }
 
-    if (imageTexture)
-        SDL_DestroyTexture(imageTexture);
-    imageTexture = NULL;
+    // free(imageTexture);
+    // imageTexture.Vram = 0;
 
     if (!isRefresh) {
         if (displayInfo.displays)
@@ -326,14 +168,10 @@ void RenderDevice::Release(bool32 isRefresh)
         displayInfo.displays = NULL;
     }
 
-    if (!isRefresh && renderer)
-        SDL_DestroyRenderer(renderer);
-
-    if (!isRefresh && window)
-        SDL_DestroyWindow(window);
-
-    if (!isRefresh)
-        SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_EVENTS);
+    if (!isRefresh && gsGlobal) {
+        gsKit_deinit_global(gsGlobal);
+        gsGlobal = NULL;
+    }
 
     if (!isRefresh) {
         if (scanlines)
@@ -344,6 +182,7 @@ void RenderDevice::Release(bool32 isRefresh)
 
 void RenderDevice::RefreshWindow()
 {
+#if 0
     videoSettings.windowState = WINDOWSTATE_UNINITIALIZED;
 
     Release(true);
@@ -393,21 +232,22 @@ void RenderDevice::RefreshWindow()
         return;
 
     videoSettings.windowState = WINDOWSTATE_ACTIVE;
+#endif
 }
 
 void RenderDevice::InitFPSCap()
 {
-    targetFreq = SDL_GetPerformanceFrequency() / videoSettings.refreshRate;
-    curTicks   = 0;
-    prevTicks  = 0;
+    // targetFreq = SDL_GetPerformanceFrequency() / videoSettings.refreshRate;
+    // curTicks   = 0;
+    // prevTicks  = 0;
 }
 bool RenderDevice::CheckFPSCap()
 {
-    curTicks = SDL_GetPerformanceCounter();
-    if (curTicks >= prevTicks + targetFreq)
-        return true;
-
-    return false;
+    // curTicks = SDL_GetPerformanceCounter();
+    // if (curTicks >= prevTicks + targetFreq)
+    //
+    // return false;
+    return true;
 }
 void RenderDevice::UpdateFPSCap() { prevTicks = curTicks; }
 
@@ -462,24 +302,21 @@ bool RenderDevice::InitGraphicsAPI()
             viewSize.y = videoSettings.windowHeight;
         }
         else {
-            viewSize.x = displayWidth[displayModeIndex];
-            viewSize.y = displayHeight[displayModeIndex];
+            viewSize.x = displayWidth[0];
+            viewSize.y = displayHeight[0];
         }
     }
     else {
         int32 bufferWidth  = videoSettings.fsWidth;
         int32 bufferHeight = videoSettings.fsHeight;
         if (videoSettings.fsWidth <= 0 || videoSettings.fsHeight <= 0) {
-            bufferWidth  = displayWidth[displayModeIndex];
-            bufferHeight = displayHeight[displayModeIndex];
+            bufferWidth  = displayWidth[0];
+            bufferHeight = displayHeight[0];
         }
 
         viewSize.x = bufferWidth;
         viewSize.y = bufferHeight;
     }
-
-    SDL_SetWindowSize(window, viewSize.x, viewSize.y);
-    SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 
     int32 maxPixHeight = 0;
 #if !RETRO_USE_ORIGINAL_CODE
@@ -515,8 +352,8 @@ bool RenderDevice::InitGraphicsAPI()
     pixelSize.x = screens[0].size.x;
     pixelSize.y = screens[0].size.y;
 
-    SDL_RenderSetLogicalSize(renderer, videoSettings.pixWidth, SCREEN_YSIZE);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    // SDL_RenderSetLogicalSize(renderer, videoSettings.pixWidth, SCREEN_YSIZE);
+    // SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
 #if !RETRO_USE_ORIGINAL_CODE
     if (screenWidth <= 512 && maxPixHeight <= 256) {
@@ -530,20 +367,33 @@ bool RenderDevice::InitGraphicsAPI()
         textureSize.x = 1024.0;
         textureSize.y = 512.0;
     }
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-    for (int32 s = 0; s < SCREEN_COUNT; ++s) {
-        screenTexture[s] = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STREAMING, textureSize.x, textureSize.y);
+    // SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
 
-        if (!screenTexture[s]) {
-            PrintLog(PRINT_NORMAL, "ERROR: failed to create screen buffer!\nerror msg: %s", SDL_GetError());
-            return 0;
+    // ok so, the PS2 has 4MiB of VRAM. if textureSize is 1024x512 each screen (thats four) uses 1MiB... idk what the code above is supposed to do but hopefully that doesn't happpen
+    for (int32 s = 0; s < SCREEN_COUNT; ++s) {
+        screenTexture[s].Width  = textureSize.x;
+        screenTexture[s].Height = textureSize.y;
+        screenTexture[s].PSM    = GS_PSM_CT16;
+        screenTexture[s].Filter = GS_FILTER_NEAREST;
+        screenTexture[s].Mem    = (uint32*)memalign(128,
+                                           gsKit_texture_size_ee(textureSize.x, textureSize.y, screenTexture[s].PSM));
+        screenTexture[s].Vram   = gsKit_vram_alloc(gsGlobal,
+                                                   gsKit_texture_size_ee(textureSize.x, textureSize.y, screenTexture[s].PSM),
+                                                   GSKIT_ALLOC_USERBUFFER);
+
+        if(screenTexture[s].Vram == GSKIT_ALLOC_ERROR)
+        {
+            PrintLog(PRINT_NORMAL, "ERROR: VRAM Allocation Failed.", SDL_GetError());
+            return false;
         }
     }
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
-    imageTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, RETRO_VIDEO_TEXTURE_W, RETRO_VIDEO_TEXTURE_H);
-    if (!imageTexture)
-        return false;
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+
+    // TODO: video
+    // SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+    // imageTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, RETRO_VIDEO_TEXTURE_W, RETRO_VIDEO_TEXTURE_H);
+    // if (!imageTexture)
+    //     return false;
+    // SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
 
     lastShaderID = -1;
     InitVertexBuffer();
@@ -599,13 +449,6 @@ bool RenderDevice::InitShaders()
 
 bool RenderDevice::SetupRendering()
 {
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-
-    if (!renderer) {
-        PrintLog(PRINT_NORMAL, "ERROR: failed to create renderer!");
-        return false;
-    }
-
     GetDisplays();
 
     if (!InitGraphicsAPI() || !InitShaders())
@@ -624,79 +467,26 @@ bool RenderDevice::SetupRendering()
 
 void RenderDevice::GetDisplays()
 {
-    int32 currentWindowDisplay = SDL_GetWindowDisplayIndex(window);
+    displayWidth[0] = gsGlobal->Width;
+    displayHeight[0] = gsGlobal->Height;
+    displayCount = 1;
 
-    int32 dispCount = SDL_GetNumVideoDisplays();
-
-    SDL_DisplayMode currentDisplay;
-    SDL_GetCurrentDisplayMode(currentWindowDisplay, &currentDisplay);
-
-    displayModeIndex = 0;
-    for (int32 a = 0; a < dispCount; ++a) {
-        SDL_DisplayMode displayMode;
-
-        SDL_GetCurrentDisplayMode(currentWindowDisplay, &displayMode);
-        displayWidth[a]  = displayMode.w;
-        displayHeight[a] = displayMode.h;
-
-        if (memcmp(&currentDisplay, &displayMode, sizeof(displayMode)) == 0) {
-            displayModeIndex = a;
-        }
-    }
-
-    displayCount = SDL_GetNumDisplayModes(currentWindowDisplay);
-    if (displayInfo.displays)
-        free(displayInfo.displays);
-
-    displayInfo.displays          = (decltype(displayInfo.displays))malloc(sizeof(SDL_DisplayMode) * displayCount);
-    int32 newDisplayCount         = 0;
-    bool32 foundFullScreenDisplay = false;
-
-    for (int32 d = displayCount - 1; d >= 0; --d) {
-        SDL_GetDisplayMode(currentWindowDisplay, d, &displayInfo.displays[newDisplayCount].internal);
-
-        int32 refreshRate = displayInfo.displays[newDisplayCount].refresh_rate;
-        if (refreshRate >= 59 && (refreshRate <= 60 || refreshRate >= 120) && displayInfo.displays[newDisplayCount].height >= (SCREEN_YSIZE * 2)) {
-            if (newDisplayCount != 0 && refreshRate == 60 && displayInfo.displays[newDisplayCount - 1].refresh_rate == 59) {
-                memcpy(&displayInfo.displays[newDisplayCount - 1], &displayInfo.displays[newDisplayCount], sizeof(displayInfo.displays[0]));
-                --newDisplayCount;
-            }
-
-            if (videoSettings.fsWidth == displayInfo.displays[newDisplayCount].width
-                && videoSettings.fsHeight == displayInfo.displays[newDisplayCount].height)
-                foundFullScreenDisplay = true;
-
-            ++newDisplayCount;
-        }
-    }
-
-    displayCount = newDisplayCount;
-    if (!foundFullScreenDisplay) {
-        videoSettings.fsWidth     = 0;
-        videoSettings.fsHeight    = 0;
-        videoSettings.refreshRate = 60; // 0;
-    }
+    displayInfo.displays                 = (decltype(displayInfo.displays))malloc(sizeof(displayInfo.displays->internal));
+    displayInfo.displays[0].width        = displayWidth[0];
+    displayInfo.displays[0].height       = displayHeight[0];
+    displayInfo.displays[0].refresh_rate = videoSettings.refreshRate;
 }
 
 void RenderDevice::GetWindowSize(int32 *width, int32 *height)
 {
-    if (!videoSettings.windowed) {
-        SDL_GetRendererOutputSize(renderer, width, height);
-    }
-    else {
-        int32 currentWindowDisplay = SDL_GetWindowDisplayIndex(window);
+    if (width)
+        *width = gsGlobal->Width;
 
-        SDL_DisplayMode display;
-        SDL_GetCurrentDisplayMode(currentWindowDisplay, &display);
-
-        if (width)
-            *width = display.w;
-
-        if (height)
-            *height = display.h;
-    }
+    if (height)
+        *height = gsGlobal->Height;
 }
 
+#if 0
 void RenderDevice::ProcessEvent(SDL_Event event)
 {
     switch (event.type) {
@@ -1036,23 +826,26 @@ void RenderDevice::ProcessEvent(SDL_Event event)
         case SDL_QUIT: isRunning = false; break;
     }
 }
+#endif
 
 bool RenderDevice::ProcessEvents()
 {
-    SDL_Event sdlEvent;
-
-    while (SDL_PollEvent(&sdlEvent)) {
-        ProcessEvent(sdlEvent);
-
-        if (!isRunning)
-            return false;
-    }
-
-    return isRunning;
+    // SDL_Event sdlEvent;
+    //
+    // while (SDL_PollEvent(&sdlEvent)) {
+    //     ProcessEvent(sdlEvent);
+    //
+    //     if (!isRunning)
+    //         return false;
+    // }
+    //
+    // return isRunning;
+    return true;
 }
 
 void RenderDevice::SetupImageTexture(int32 width, int32 height, uint8 *imagePixels)
 {
+#if 0
     if (lastTextureFormat != SHADER_RGB_IMAGE) {
         if (imageTexture)
             SDL_DestroyTexture(imageTexture);
@@ -1079,11 +872,14 @@ void RenderDevice::SetupImageTexture(int32 width, int32 height, uint8 *imagePixe
     }
 
     SDL_UnlockTexture(imageTexture);
+#endif
 }
 
 void RenderDevice::SetupVideoTexture_YUV420(int32 width, int32 height, uint8 *yPlane, uint8 *uPlane, uint8 *vPlane, int32 strideY, int32 strideU,
                                             int32 strideV)
 {
+#if 0
+
     if (lastTextureFormat != SHADER_YUV_420) {
         if (imageTexture)
             SDL_DestroyTexture(imageTexture);
@@ -1096,10 +892,12 @@ void RenderDevice::SetupVideoTexture_YUV420(int32 width, int32 height, uint8 *yP
     }
 
     SDL_UpdateYUVTexture(imageTexture, NULL, yPlane, strideY, uPlane, strideU, vPlane, strideV);
+#endif
 }
 void RenderDevice::SetupVideoTexture_YUV422(int32 width, int32 height, uint8 *yPlane, uint8 *uPlane, uint8 *vPlane, int32 strideY, int32 strideU,
                                             int32 strideV)
 {
+#if 0
     if (lastTextureFormat != SHADER_YUV_422) {
         if (imageTexture)
             SDL_DestroyTexture(imageTexture);
@@ -1112,10 +910,12 @@ void RenderDevice::SetupVideoTexture_YUV422(int32 width, int32 height, uint8 *yP
     }
 
     SDL_UpdateYUVTexture(imageTexture, NULL, yPlane, strideY, uPlane, strideU, vPlane, strideV);
+#endif
 }
 void RenderDevice::SetupVideoTexture_YUV444(int32 width, int32 height, uint8 *yPlane, uint8 *uPlane, uint8 *vPlane, int32 strideY, int32 strideU,
                                             int32 strideV)
 {
+#if 0
     if (lastTextureFormat != SHADER_YUV_444) {
         if (imageTexture)
             SDL_DestroyTexture(imageTexture);
@@ -1128,4 +928,5 @@ void RenderDevice::SetupVideoTexture_YUV444(int32 width, int32 height, uint8 *yP
     }
 
     SDL_UpdateYUVTexture(imageTexture, NULL, yPlane, strideY, uPlane, strideU, vPlane, strideV);
+#endif
 }
