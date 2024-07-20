@@ -1080,7 +1080,7 @@ void RSDK::LoadGameConfig()
         for (int32 i = 0; i < sfxCnt; ++i) {
             ReadString(&info, buffer);
             uint8 maxConcurrentPlays = ReadInt8(&info);
-            LoadSfx(buffer, maxConcurrentPlays, SCOPE_GLOBAL);
+            // LoadSfx(buffer, maxConcurrentPlays, SCOPE_GLOBAL);
         }
 
         uint16 totalSceneCount = ReadInt16(&info);

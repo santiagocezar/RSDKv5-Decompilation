@@ -26,7 +26,7 @@ bool RenderDevice::Init()
 
     gsGlobal->Mode            = GS_MODE_NTSC;
     // gsGlobal->PrimAlphaEnable = GS_SETTING_ON;
-    gsGlobal->PSM             = GS_PSM_CT24;
+    gsGlobal->PSM             = GS_PSM_CT16;
     gsGlobal->ZBuffering = GS_SETTING_OFF;
     gsGlobal->DoubleBuffering = GS_SETTING_OFF;
     // gsGlobal->Interlace = GS_NONINTERLACED;
@@ -298,80 +298,19 @@ bool RenderDevice::InitGraphicsAPI()
 {
     videoSettings.shaderSupport = false;
 
-    viewSize.x = 0;
-    viewSize.y = 0;
+    viewSize.x = displayWidth[0];
+    viewSize.y = displayHeight[0];
 
-    if (videoSettings.windowed || !videoSettings.exclusiveFS) {
-        if (videoSettings.windowed) {
-            viewSize.x = videoSettings.windowWidth;
-            viewSize.y = videoSettings.windowHeight;
-        }
-        else {
-            viewSize.x = displayWidth[0];
-            viewSize.y = displayHeight[0];
-        }
-    }
-    else {
-        int32 bufferWidth  = videoSettings.fsWidth;
-        int32 bufferHeight = videoSettings.fsHeight;
-        if (videoSettings.fsWidth <= 0 || videoSettings.fsHeight <= 0) {
-            bufferWidth  = displayWidth[0];
-            bufferHeight = displayHeight[0];
-        }
-
-        viewSize.x = bufferWidth;
-        viewSize.y = bufferHeight;
-    }
-
-    int32 maxPixHeight = 0;
-#if !RETRO_USE_ORIGINAL_CODE
-    int32 screenWidth = 0;
-#endif
     for (int32 s = 0; s < 4; ++s) {
-        if (videoSettings.pixHeight > maxPixHeight)
-            maxPixHeight = videoSettings.pixHeight;
-
-        screens[s].size.y = videoSettings.pixHeight;
-
-        float viewAspect = viewSize.x / viewSize.y;
-#if !RETRO_USE_ORIGINAL_CODE
-        screenWidth = (int32)((viewAspect * videoSettings.pixHeight) + 3) & 0xFFFFFFFC;
-#else
-        int32 screenWidth = (int32)((viewAspect * videoSettings.pixHeight) + 3) & 0xFFFFFFFC;
-#endif
-        if (screenWidth < videoSettings.pixWidth)
-            screenWidth = videoSettings.pixWidth;
-
-#if !RETRO_USE_ORIGINAL_CODE
-        if (customSettings.maxPixWidth && screenWidth > customSettings.maxPixWidth)
-            screenWidth = customSettings.maxPixWidth;
-#else
-        if (screenWidth > DEFAULT_PIXWIDTH)
-            screenWidth = DEFAULT_PIXWIDTH;
-#endif
-
         memset(&screens[s].frameBuffer, 0, sizeof(screens[s].frameBuffer));
-        SetScreenSize(s, screenWidth, screens[s].size.y);
+        SetScreenSize(s, DEFAULT_PIXWIDTH, videoSettings.pixHeight);
     }
 
-    pixelSize.x = screens[0].size.x;
-    pixelSize.y = screens[0].size.y;
+    textureSize.x = pixelSize.x = screens[0].size.x;
+    textureSize.y = pixelSize.y = screens[0].size.y;
 
-    // SDL_RenderSetLogicalSize(renderer, videoSettings.pixWidth, SCREEN_YSIZE);
-    // SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-#if !RETRO_USE_ORIGINAL_CODE
-    if (screenWidth <= 512 && maxPixHeight <= 256) {
-#else
-    if (maxPixHeight <= 256) {
-#endif
-        textureSize.x = 512.0;
-        textureSize.y = 256.0;
-    }
-    else {
-        textureSize.x = 1024.0;
-        textureSize.y = 512.0;
-    }
+    // 512.0;
+    // 256.0;
     // SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
 
     // ok so, the PS2 has 4MiB of VRAM. if textureSize is 1024x512 each screen (thats four) uses 1MiB... idk what the code above is supposed to do but hopefully that doesn't happpen
@@ -388,7 +327,7 @@ bool RenderDevice::InitGraphicsAPI()
                                            gsKit_texture_size_ee(textureSize.x, textureSize.y, screenTexture[s].PSM));
 
         screenTexture[s].Vram   = gsKit_vram_alloc(gsGlobal,
-                                                   gsKit_texture_size_ee(textureSize.x, textureSize.y, screenTexture[s].PSM),
+                                                   gsKit_texture_size(textureSize.x, textureSize.y, screenTexture[s].PSM),
                                                    GSKIT_ALLOC_USERBUFFER);
 
         if(screenTexture[s].Vram == GSKIT_ALLOC_ERROR)

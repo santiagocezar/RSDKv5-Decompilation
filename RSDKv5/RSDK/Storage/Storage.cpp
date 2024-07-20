@@ -28,12 +28,12 @@ DataStorage RSDK::dataStorage[DATASET_MAX];
 
 bool32 RSDK::InitStorage()
 {
-    // Storage limits.
-    dataStorage[DATASET_STG].storageLimit = 24 * 1024 * 1024; // 24MB
-    dataStorage[DATASET_MUS].storageLimit = 8 * 1024 * 1024;  //  8MB
-    dataStorage[DATASET_SFX].storageLimit = 32 * 1024 * 1024; // 32MB
-    dataStorage[DATASET_STR].storageLimit = 2 * 1024 * 1024;  //  2MB
-    dataStorage[DATASET_TMP].storageLimit = 8 * 1024 * 1024;  //  8MB
+    // Storage limits. trying to get it under 16MB
+    dataStorage[DATASET_STG].storageLimit = 16 * 1024 * 1024; // 16MiB originally 24MB
+    dataStorage[DATASET_MUS].storageLimit = 0;  // originally 8MB
+    dataStorage[DATASET_SFX].storageLimit = 0; // originally 32MB
+    dataStorage[DATASET_STR].storageLimit = 512 * 1024;  //  0.5MiB
+    dataStorage[DATASET_TMP].storageLimit = 6 * 1024 * 1024;  //  6MiB
 
     for (int32 s = 0; s < DATASET_MAX; ++s) {
         dataStorage[s].usedStorage = 0;
