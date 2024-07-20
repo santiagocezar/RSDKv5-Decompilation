@@ -24,9 +24,11 @@ bool RenderDevice::Init()
     gsGlobal = gsKit_init_global();
 
 
-    gsGlobal->Mode            = GS_MODE_VGA_640_60;
+    gsGlobal->Mode            = GS_MODE_NTSC;
     // gsGlobal->PrimAlphaEnable = GS_SETTING_ON;
-    gsGlobal->PSM             = GS_PSM_CT16;
+    gsGlobal->PSM             = GS_PSM_CT24;
+    gsGlobal->ZBuffering = GS_SETTING_OFF;
+    gsGlobal->DoubleBuffering = GS_SETTING_OFF;
     // gsGlobal->Interlace = GS_NONINTERLACED;
     // gsGlobal->Field = GS_FRAME;
 
@@ -34,6 +36,8 @@ bool RenderDevice::Init()
                 D_CTRL_STD_OFF, D_CTRL_RCYC_8, 1 << DMA_CHANNEL_GIF);
 
     dmaKit_chan_init(DMA_CHANNEL_GIF);
+
+    gsKit_vram_clear(gsGlobal);
 
     gsKit_init_screen(gsGlobal);
 
@@ -55,12 +59,12 @@ bool RenderDevice::Init()
 void RenderDevice::CopyFrameBuffer()
 {
     for (int32 s = 0; s < videoSettings.screenCount; ++s) {
-        uint16 *pixels = (uint16 *)screenTexture[s].Mem;
+        uint16 *pixels = (uint16*)screenTexture[s].Mem;
         uint16 *frameBuffer = screens[s].frameBuffer;
         for (int32 y = 0; y < SCREEN_YSIZE; ++y) {
             memcpy(pixels, frameBuffer, screens[s].size.x * sizeof(uint16));
             frameBuffer += screens[s].pitch;
-            pixels += screens[s].pitch;
+            pixels += screenTexture[s].Width;
         }
 
         gsKit_texture_upload(gsGlobal, &screenTexture[s]);
